@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#badb54">
+<title>HK FPS QR Code Editor</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+<style>
+/*
+  body {
+    margin: 0px;
+  }
+  div.col-xl-10 {
+    padding-right: 0px;
+    padding-left: 0px;
+  }
+  div.col-xl-2 {
+    padding-right: 0px;
+    padding-left: 0px;
+  }
+*/
+  div#sidebar {
+    margin-top: 8px;
+  }
+  div#sidebar a img {
+    margin-bottom: 8px;
+  }
+  div#control {
+    margin-top: 8px;
+  }
+  div.alert {
+    margin-top: 8px;
+    margin-bottom: 0px;
+  }
+  div#control button {
+    margin-bottom: 8px;
+    border-radius: 15px;
+    min-width: 90px;
+  }
+  </style>
+</head>
+<body>
+<div class="container-fluid">
+<div class="row">
+<div class="col-xl-10">
+<div id="reader"></div>
+
+<div id="control" class="text-center">
+
+  <div class="mb-3 row">
+    <label for="rawText" class="col-sm-2 col-form-label">Raw text</label>
+    <div class="col-sm-10">
+      <input type="text" readonly class="form-control-plaintext" id="rawText">
+    </div>
+  </div>
+  <div class="mb-3 row">
+    <label for="transactionAmount" class="col-sm-2 col-form-label">Transaction Amount</label>
+    <div class="col-sm-10">
+      <input type="number" min="0" step="0.01" class="form-control" id="transactionAmount">
+    </div>
+  </div>
+  <div class="mb-3 row">
+    <label for="crc" class="col-sm-2 col-form-label">Cyclic Redundancy Check (CRC)</label>
+    <div class="col-sm-10">
+      <input type="text" readonly class="form-control" id="crc">
+    </div>
+  </div>
+  <div class="col-auto">
+    <button id="generate_qr_code" type="button" class="btn btn-primary mb-3">Generate QR Code</button>
+  </div>
+
+</div>
+</div>
+<div class="col-xl-2">
+
+<div id="sidebar" class="text-center">
+
+<div id="badge" class="text-center">
+<a href="https://play.google.com/store/apps/details?id=simon.kaelae.tvrecommendation&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1" target="_blank"><img alt="Get it on Google Play" src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" width="200"></a>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-155224825-1"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-155224825-1');
+</script>
+<script>
+String.prototype.isHex = function() {
+  return new RegExp("/[a-f0-9 \t]/i").test(this);
+};
+
+var CRC = {
+  StringToCheck: "",
+  CleanedString: "",
+  CRCTableDNP: [],
+  init: function() {
+    this.CRCDNPInit();
+  },
+  CleanString: function(inputType) {
+    if (inputType == "ASCII") {
+      this.CleanedString = this.StringToCheck;
+    } else {
+      if (this.StringToCheck.match(/^[0-9A-F \t]+$/gi) !== null) {
+        this.CleanedString = this._hexStringToString(this.StringToCheck.toUpperCase().replace(/[\t ]/g, ''));
+      } else {
+        window.alert("String doesn't seem to be a valid Hex input.");
+        return false;
+      }
+    }
+    return true;
+  },
+  CRCFFFF: function() {
+    var str = this.CleanedString;
+    var crc = 0xFFFF;
+    for (var c = 0; c < str.length; c++) {
+      crc ^= str.charCodeAt(c) << 8;
+      for (var i = 0; i < 8; i++) {
+        if (crc & 0x8000)
+          crc = (crc << 1) ^ 0x1021;
+        else
+          crc = crc << 1;
+      }
+    }
+    return crc & 0xFFFF;
+  },
+  CRCDNPInit: function() {
+    var i, j, crc, c;
+    for (i = 0; i < 256; i++) {
+      crc = 0;
+      c = i;
+      for (j = 0; j < 8; j++) {
+        if ((crc ^ c) & 0x0001) crc = (crc >> 1) ^ 0xA6BC;
+        else crc = crc >> 1;
+        c = c >> 1;
+      }
+      this.CRCTableDNP[i] = crc;
+    }
+  },
+  _hexStringToString: function(inputstr) {
+    var hex = inputstr.toString(); //force conversion
+    var str = '';
+    for (var i = 0; i < hex.length; i += 2)
+      str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+    return str;
+  },
+  Calculate: function(str, inputType) {
+    this.StringToCheck = str;
+    if (this.CleanString(inputType)) {
+      $("#crc").val(this.CRCFFFF().toString(16).toUpperCase());
+    }
+  }
+};
+
+$(document).ready(function() {
+  CRC.init();
+});
+</script>
+<script>
+//https://www.hkma.gov.hk/media/chi/doc/key-functions/financial-infrastructure/infrastructure/retail-payment-initiatives/Common_QR_Code_Specification.pdf
+
+var decodedData, transactionAmount, transactionAmountLength, crc;
+
+function onScanSuccess(decodedText, decodedResult) {
+  decodedData = `${decodedText}`;
+  $("#rawText").val(decodedData);
+
+  const regex = /(53(03)(344))(54(..)(.*))(58(02)(HK))(.*)(62(..)(.*))(63(04)(.*))/gm;
+  let m;
+  while((m = regex.exec(decodedData)) !== null) {
+    // This is necessary to avoid infinite loops with zero-width matches
+    if(m.index === regex.lastIndex) {
+      regex.lastIndex++;
+    }
+
+    // The result can be accessed through the `m`-variable.
+    m.forEach((match, groupIndex) => {
+      //console.log(`Found match, group ${groupIndex}: ${match}`);
+    });
+    //console.log(m);
+    transactionAmount = m[6];
+    transactionAmountLength = transactionAmount.length;
+    crc = m[16];
+
+    if(transactionAmountLength < 10) {
+      transactionAmountLength = "0" + transactionAmountLength;
+    }
+    //console.log(transactionAmountLength);
+    $("#transactionAmount").val(transactionAmount);
+
+    $("#crc").val(crc);
+  }
+}
+
+function onScanFailure(error) {
+  console.warn(`Code scan error = ${error}`);
+}
+
+let html5QrcodeScanner = new Html5QrcodeScanner(
+  "reader",
+  { fps: 10, qrbox: {width: 250, height: 250} },
+  /* verbose= */ false);
+
+html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+
+$("div#control button").click(function() {
+  this.blur();
+  console.log(crc);
+  //CRC.Calculate("00020101021226430012hk.com.hkicl0418wsdinfo@wsd.gov.hk060115204000053033445405168.35802HK5902NA6002HK62150111534684580046304", "ASCII");
+  gtag('event', this.id);
+});
+</script>
+
+
+</body>
+</html>
